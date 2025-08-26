@@ -49,7 +49,7 @@ def render_html(forecast, last_updated):
     header = f"<div style='font-family:monospace'>Last update: {last_updated.astimezone().strftime('%Y-%m-%d %H:%M %Z')}</div>"
     lines.append(header)
     for ts, prob in forecast:
-        time_label = ts.strftime("%Y-%m-%d %H:%M UTC")
+        time_label = ts.strftime("%Y-%m-%d %H:%M")
         if prob is None:
             prob_text = "N/A"
             value = 0
