@@ -1,0 +1,4 @@
+LATITUDE = 10.0
+LONGITUDE = 10.0
+HOURS_AHEAD = 12
+TIMEZONE = "Continent/City"
