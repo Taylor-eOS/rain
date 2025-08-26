@@ -27,8 +27,10 @@ def fetch_and_cache():
     global CACHE, LAST_UPDATED
     try:
         data = rain_probability_next()
+        today = datetime.now(timezone.utc).date()
+        filtered = [(ts, prob) for ts, prob in data if ts.date() == today]
         with CACHE_LOCK:
-            CACHE = data
+            CACHE = filtered
             LAST_UPDATED = datetime.now(timezone.utc)
     except Exception:
         with CACHE_LOCK:
