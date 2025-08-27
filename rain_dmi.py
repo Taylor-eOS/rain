@@ -93,7 +93,7 @@ def probe_and_get_entries(api_key, lon, lat, tz_name):
             return _parse_features(features, pk, tz_name), True
     return [], False
 
-def rain_today_warning(api_key=None, lat=settings.LATITUDE, lon=settings.LONGITUDE, tz_name=settings.TIMEZONE):
+def rain_today_warning(api_key=None, lat=settings.LATITUDE, lon=settings.LONGITUDE, tz_name=settings.TIMEZONE, restrict_to_today=True):
     if api_key is None:
         api_key = settings.API_KEY
     entries, found_data = probe_and_get_entries(api_key, lon, lat, tz_name)
@@ -103,15 +103,18 @@ def rain_today_warning(api_key=None, lat=settings.LATITUDE, lon=settings.LONGITU
     entries = _convert_to_hourly(entries)
     tz = ZoneInfo(tz_name)
     now_local = datetime.now(tz)
-    start_of_today = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
-    end_of_today = start_of_today + timedelta(days=1)
-    today_entries = [(ts, v) for ts, v in entries if start_of_today <= ts < end_of_today]
-    if not today_entries:
-        print("No forecast data available for today. (No today_entries)")
+    if restrict_to_today:
+        start_of_today = now_local.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_of_today = start_of_today + timedelta(days=1)
+        filtered_entries = [(ts, v) for ts, v in entries if start_of_today <= ts < end_of_today]
+    else:
+        filtered_entries = entries
+    if not filtered_entries:
+        print("No forecast data available. (No filtered_entries)")
         return
-    future_entries = [(ts, v) for ts, v in today_entries if ts >= now_local]
+    future_entries = [(ts, v) for ts, v in filtered_entries if ts >= now_local]
     if not future_entries:
-        print("No future forecast data available for today. (No future_entries)")
+        print("No future forecast data available. (No future_entries)")
         return
     vals = [v for _, v in future_entries]
     max_v = max(vals) if vals else 0
@@ -133,7 +136,7 @@ def rain_today_warning(api_key=None, lat=settings.LATITUDE, lon=settings.LONGITU
         print(f"Peak predicted precipitation: {max_v:.2f} mm")
     shown = 0
     for ts, v in future_entries:
-        if shown >= 12:
+        if shown >= settings.HOURS_AHEAD:
             break
         if is_prob:
             print(ts.strftime("%H:%M"), f"{v*100:.0f}%")
@@ -142,5 +145,5 @@ def rain_today_warning(api_key=None, lat=settings.LATITUDE, lon=settings.LONGITU
         shown += 1
 
 if __name__ == "__main__":
-    rain_today_warning()
+    rain_today_warning(restrict_to_today=False)
 
