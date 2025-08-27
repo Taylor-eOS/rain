@@ -14,6 +14,7 @@ PORT = 8000
 forecast_data = []
 last_updated = datetime.now()
 data_lock = threading.Lock()
+DAYS_AHEAD = 1
 
 def get_local_ip():
     try:
@@ -38,7 +39,7 @@ def update_forecast_data():
                 tz = ZoneInfo(settings.TIMEZONE)
                 now_local = datetime.now(tz)
                 midnight_today = datetime.combine(now_local.date(), time(0, 0), tz)
-                midnight_tomorrow = midnight_today.replace(day=midnight_today.day + 1)
+                midnight_tomorrow = midnight_today.replace(day=midnight_today.day + DAYS_AHEAD)
                 future_entries = [(ts, v) for ts, v in hourly_entries 
                                  if ts >= now_local and ts < midnight_tomorrow]
                 with data_lock:
@@ -110,13 +111,16 @@ def run_server():
     update_thread.start()
     time_module.sleep(2)
     local_ip = get_local_ip()
-    with socketserver.TCPServer(("0.0.0.0", PORT), RainForecastHandler) as httpd:
-        print(f"Serving rain forecast at http://{local_ip}:{PORT}")
-        print("Press Ctrl+C to stop the server")
-        try:
-            httpd.serve_forever()
-        except KeyboardInterrupt:
-            print("\nShutting down server")
+    socketserver.TCPServer.allow_reuse_address = True
+    httpd = socketserver.TCPServer(("0.0.0.0", PORT), RainForecastHandler)
+    print(f"Serving rain forecast at http://{local_ip}:{PORT}")
+    print("Press Ctrl+C to stop the server")
+    try:
+        httpd.serve_forever()
+    except KeyboardInterrupt:
+        print("\nShutting down server")
+        httpd.shutdown()
+        httpd.server_close()
 
 if __name__ == "__main__":
     run_server()
