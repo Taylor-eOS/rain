@@ -3,10 +3,19 @@ import socketserver
 import html
 from datetime import datetime
 from zoneinfo import ZoneInfo
+import socket
+from contextlib import closing
 import rain_dmi
 import settings
 PORT = 8000
-HOST = "0.0.0.0"  
+
+def get_local_ip():
+    try:
+        with closing(socket.socket(socket.AF_INET, socket.SOCK_DGRAM)) as s:
+            s.connect(('8.8.8.8', 80))
+            return s.getsockname()[0]
+    except:
+        return socket.gethostbyname(socket.gethostname())
 
 def get_rain_forecast():
     try:
@@ -32,7 +41,7 @@ def render_html(forecast, last_updated):
     header = f"<div style='font-family:monospace'>Last update: {last_updated.astimezone().strftime('%Y-%m-%d %H:%M %Z')}</div>"
     lines.append(header)
     is_probability = False
-    if forecast and forecast[0][1] <= 1:  
+    if forecast and forecast[0][1] <= 1:
         is_probability = True
     for ts, value in forecast:
         time_label = ts.strftime("%Y-%m-%d %H:%M")
@@ -42,10 +51,10 @@ def render_html(forecast, last_updated):
         else:
             if is_probability:
                 value_text = f"{value*100:.0f}%"
-                progress_value = value * 100  
+                progress_value = value * 100
             else:
                 value_text = f"{value:.2f} mm"
-                progress_value = min(value * 10, 100)  
+                progress_value = min(value * 10, 100)
         lines.append(
             f"<div style='font-family:monospace'>"
             f"{html.escape(time_label)} "
@@ -66,13 +75,17 @@ class RainForecastHandler(http.server.SimpleHTTPRequestHandler):
             self.send_header('Content-type', 'text/html')
             self.send_header('Content-length', str(len(html_content)))
             self.end_headers()
-            self.wfile.write(html_content)
+            try:
+                self.wfile.write(html_content)
+            except BrokenPipeError:
+                pass
         else:
             self.send_error(404, "File not found")
 
 def run_server():
-    with socketserver.TCPServer((HOST, PORT), RainForecastHandler) as httpd:
-        print(f"Serving rain forecast at http://{HOST}:{PORT}")
+    local_ip = get_local_ip()
+    with socketserver.TCPServer(("0.0.0.0", PORT), RainForecastHandler) as httpd:
+        print(f"Serving rain forecast at http://{local_ip}:{PORT}")
         print("Press Ctrl+C to stop the server")
         try:
             httpd.serve_forever()
@@ -81,4 +94,3 @@ def run_server():
 
 if __name__ == "__main__":
     run_server()
-
