@@ -3,14 +3,13 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 import settings
 
-BASE = "https://dmigw.govcloud.dk/v1/forecastedr/collections/harmonie_dini_sf/position"
-CANDIDATES = ["total-precipitation"]
-
-def _point_request(api_key, lon, lat, parameter):
+def _point_request(api_key, lon, lat, parameter, datetime_str=None):
     params = {"coords": f"POINT({lon} {lat})", "crs": "crs84", "f": "GeoJSON", "api-key": api_key}
     if parameter:
         params["parameter-name"] = parameter
-    r = requests.get(BASE, params=params, timeout=20)
+    if datetime_str:
+        params["datetime"] = datetime_str
+    r = requests.get(settings.BASE, params=params, timeout=60)
     return r
 
 def _find_precip_key(features):
@@ -70,29 +69,26 @@ def _convert_to_hourly(entries):
 
 def probe_and_get_entries(api_key, lon, lat, tz_name):
     if not api_key:
-        raise ValueError("Missing value API_KEY in settings. Add it.")
-    resp = _point_request(api_key, lon, lat, None)
-    if resp.ok:
-        j = resp.json()
-        features = j.get("features", [])
-        pk = _find_precip_key(features)
-        if pk:
-            return _parse_features(features, pk, tz_name), True
-    for param in CANDIDATES:
+        raise ValueError("Missing value API_KEY in settings.py. Add it.")
+    from datetime import timezone
+    now_utc = datetime.now(timezone.utc).replace(microsecond=0)
+    end_utc = now_utc + timedelta(days=1)
+    start_str = now_utc.replace(tzinfo=None).isoformat() + 'Z'
+    end_str = end_utc.replace(tzinfo=None).isoformat() + 'Z'
+    datetime_str = f"{start_str}/{end_str}"
+    for param in [settings.CANDIDATE, None]:
         try:
-            r = _point_request(api_key, lon, lat, param)
+            resp = _point_request(api_key, lon, lat, param, datetime_str)
         except Exception:
             continue
-        if not r.ok:
+        if not resp.ok:
             continue
-        j = r.json()
-        features = j.get("features", [])
+        features = resp.json().get("features", [])
         pk = _find_precip_key(features)
-        if not pk:
-            if features and isinstance(features[0], dict):
-                props = features[0].get("properties", {})
-                if param in props:
-                    pk = param
+        if not pk and param and features and isinstance(features[0], dict):
+            props = features[0].get("properties", {})
+            if param in props:
+                pk = param
         if pk:
             return _parse_features(features, pk, tz_name), True
     return [], False
@@ -128,7 +124,6 @@ def rain_today_warning(api_key=None, lat=settings.LATITUDE, lon=settings.LONGITU
         else:
             print("No rain expected today (probability metric).")
         print(f"Peak probability: {max_v*100:.0f}%")
-        print(f"Average probability: {avg*100:.0f}%")
     else:
         threshold_mm = 0.2
         if max_v >= threshold_mm:
